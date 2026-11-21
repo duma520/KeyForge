@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                                QPushButton, QComboBox, QGroupBox, QLabel, QProgressBar,
                                QMessageBox, QFileDialog, QSpinBox, QDoubleSpinBox, 
                                QTextEdit, QSplitter, QGridLayout, QLineEdit, QRadioButton,
-                               QButtonGroup, QCheckBox)
+                               QButtonGroup)
 from PySide6.QtCore import Qt, QSettings, Signal, QThread, QTimer
 from PySide6.QtGui import QIcon, QFont, QColor
 
@@ -28,14 +28,13 @@ DEBUG_TO_CONSOLE = False  # 编译后设置为False，避免控制台错误
 def console_print(*args, **kwargs):
     """输出到控制台 - 编译后不执行任何操作"""
     if DEBUG_TO_CONSOLE:
-        # 仅在调试模式下才尝试输出到控制台
         try:
             print(*args, **kwargs)
             sys.stdout.flush()
         except:
-            pass  # 忽略任何控制台输出错误
+            pass
 
-# 后台按键发送方式枚举 - 扩充到30+种
+# 后台按键发送方式枚举 - 只保留完整实现的方法
 class BackendKeyMethod:
     # 基础消息方式 (0-9)
     SENDMESSAGE = 0          # SendMessage WM_KEYDOWN/UP
@@ -47,64 +46,28 @@ class BackendKeyMethod:
     WM_IME_CHAR = 6          # WM_IME_CHAR输入法字符
     WM_SYSKEYDOWN = 7        # WM_SYSKEYDOWN系统按键
     POSTMESSAGE_LPARAM = 8   # PostMessage带完整lParam
-    HOOK_MESSAGE = 9         # 使用SetWindowsHookEx
     
     # 高级消息方式 (10-19)
     WM_HOTKEY = 10           # WM_HOTKEY热键消息
     WM_APPCOMMAND = 11       # WM_APPCOMMAND应用程序命令
-    POSTMESSAGE_RAW = 12     # PostMessage原始消息
-    SENDMESSAGE_TIMEOUT = 13 # SendMessageTimeout
-    SENDMESSAGE_CALLBACK = 14 # SendMessageCallback
-    BROADCAST_MSG = 15       # BroadcastSystemMessage
+    SENDMESSAGE_TIMEOUT = 12 # SendMessageTimeout
+    BROADCAST_MSG = 13       # BroadcastSystemMessage
     
     # 输入模拟方式 (20-29)
-    HARDWARE_INPUT = 20      # 硬件输入模拟
-    DIRECTINPUT = 21         # DirectInput模拟
-    DRIVER_LEVEL = 22        # 驱动级模拟
-    VMWARE_HID = 23          # VMware虚拟HID
-    DLL_INJECTION = 24       # DLL注入后调用
+    ATTACH_THREAD = 20       # AttachThreadInput方式
+    SCAN_CODE = 21           # 扫描码方式
+    EXTENDED_KEY = 22        # 扩展键标志
     
-    # 增强模拟方式 (30-39)
-    MOUSE_EVENT = 30         # mouse_event模拟
-    KEYBD_EVENT_EX = 31      # keybd_event增强版
-    SENDINPUT_WAIT = 32      # SendInput带等待
-    ATTACH_THREAD = 33       # AttachThreadInput方式
-    JOURNAL_PLAYBACK = 34    # 日记回放钩子
-    LOW_LEVEL_HOOK = 35      # 低级键盘钩子
-    VIRTUAL_KEY_EX = 36      # 虚拟键扩展
-    SCAN_CODE = 37           # 扫描码方式
-    EXTENDED_KEY = 38        # 扩展键标志
-    REMOTE_INPUT = 39        # 远程输入(RDP/VNC)
-    
-    # 特殊应用方式 (40-49)
-    GDI_INPUT = 40           # GDI输入模拟
-    RAW_INPUT = 41           # Raw Input
-    TOUCH_INPUT = 42         # 触摸输入模拟
-    PEN_INPUT = 43           # 手写笔输入
-    GAME_CONTROLLER = 44     # 游戏控制器输入
-    VOICE_COMMAND = 45       # 语音命令模拟
-    MACRO_PLAYBACK = 46      # 宏回放
-    SCRIPT_EXEC = 47         # 脚本执行
-    API_HOOK = 48            # API钩子
-    MEMORY_PATCH = 49        # 内存补丁方式
-    
-    # 网络/远程方式 (50-59)
-    NETWORK_SEND = 50        # 网络发送消息
-    DDE_MESSAGE = 51         # DDE动态数据交换
-    COM_OBJECT = 52          # COM对象调用
-    OLE_AUTOMATION = 53      # OLE自动化
-    WEB_SOCKET = 54          # WebSocket控制
-    HTTP_API = 55            # HTTP API调用
-    NAMED_PIPE = 56          # 命名管道
-    SHARED_MEMORY = 57       # 共享内存
-    WM_COPYDATA = 58         # WM_COPYDATA数据复制
-    CLIPBOARD = 59           # 剪贴板方式
+    # 特殊应用方式 (30-39)
+    WM_COPYDATA = 30         # WM_COPYDATA数据复制
+    CLIPBOARD = 31           # 剪贴板方式
+    COM_OBJECT = 32          # COM对象调用
 
     # 获取方式总数
     @classmethod
     def get_total_count(cls):
         """获取所有方式的数量"""
-        return 60
+        return 33
     
     @classmethod
     def get_method_name(cls, method):
@@ -119,48 +82,16 @@ class BackendKeyMethod:
             cls.WM_IME_CHAR: "WM_IME_CHAR输入法字符",
             cls.WM_SYSKEYDOWN: "WM_SYSKEYDOWN系统按键",
             cls.POSTMESSAGE_LPARAM: "PostMessage完整参数",
-            cls.HOOK_MESSAGE: "SetWindowsHookEx钩子",
             cls.WM_HOTKEY: "WM_HOTKEY热键消息",
             cls.WM_APPCOMMAND: "WM_APPCOMMAND命令",
-            cls.POSTMESSAGE_RAW: "PostMessage原始消息",
             cls.SENDMESSAGE_TIMEOUT: "SendMessageTimeout",
-            cls.SENDMESSAGE_CALLBACK: "SendMessageCallback",
             cls.BROADCAST_MSG: "BroadcastSystemMessage",
-            cls.HARDWARE_INPUT: "硬件输入模拟",
-            cls.DIRECTINPUT: "DirectInput模拟",
-            cls.DRIVER_LEVEL: "驱动级模拟",
-            cls.VMWARE_HID: "VMware虚拟HID",
-            cls.DLL_INJECTION: "DLL注入",
-            cls.MOUSE_EVENT: "mouse_event模拟",
-            cls.KEYBD_EVENT_EX: "keybd_event增强版",
-            cls.SENDINPUT_WAIT: "SendInput带等待",
             cls.ATTACH_THREAD: "AttachThreadInput",
-            cls.JOURNAL_PLAYBACK: "日记回放钩子",
-            cls.LOW_LEVEL_HOOK: "低级键盘钩子",
-            cls.VIRTUAL_KEY_EX: "虚拟键扩展",
             cls.SCAN_CODE: "扫描码方式",
             cls.EXTENDED_KEY: "扩展键标志",
-            cls.REMOTE_INPUT: "远程输入",
-            cls.GDI_INPUT: "GDI输入模拟",
-            cls.RAW_INPUT: "Raw Input",
-            cls.TOUCH_INPUT: "触摸输入模拟",
-            cls.PEN_INPUT: "手写笔输入",
-            cls.GAME_CONTROLLER: "游戏控制器",
-            cls.VOICE_COMMAND: "语音命令模拟",
-            cls.MACRO_PLAYBACK: "宏回放",
-            cls.SCRIPT_EXEC: "脚本执行",
-            cls.API_HOOK: "API钩子",
-            cls.MEMORY_PATCH: "内存补丁",
-            cls.NETWORK_SEND: "网络发送消息",
-            cls.DDE_MESSAGE: "DDE动态数据交换",
-            cls.COM_OBJECT: "COM对象调用",
-            cls.OLE_AUTOMATION: "OLE自动化",
-            cls.WEB_SOCKET: "WebSocket控制",
-            cls.HTTP_API: "HTTP API调用",
-            cls.NAMED_PIPE: "命名管道",
-            cls.SHARED_MEMORY: "共享内存",
             cls.WM_COPYDATA: "WM_COPYDATA",
             cls.CLIPBOARD: "剪贴板方式",
+            cls.COM_OBJECT: "COM对象调用",
         }
         return method_names.get(method, f"未知方式({method})")
 
@@ -290,119 +221,57 @@ def get_all_process_names_from_hwnd(hwnd):
     }
     
     try:
-        # 获取进程ID
         pid = win32process.GetWindowThreadProcessId(hwnd)[0]
         result['pid'] = pid
-        console_print(f"[获取进程信息] 窗口句柄: {hwnd}, PID: {pid}")
         
-        # 方法1: 尝试使用 Windows API 打开进程
-        PROCESS_QUERY_INFORMATION = 0x0400
-        PROCESS_VM_READ = 0x0010
         PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-        
         kernel32 = ctypes.windll.kernel32
         psapi = ctypes.windll.psapi
         
-        # 尝试以不同权限打开进程
         hProcess = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
-        if not hProcess:
-            hProcess = kernel32.OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, False, pid)
         
         if hProcess:
-            console_print(f"  成功打开进程句柄: {hProcess}")
-            
-            # 获取进程名
             exe_name = ctypes.create_unicode_buffer(260)
             if psapi.GetModuleBaseNameW(hProcess, None, exe_name, 260):
                 result['process_name'] = exe_name.value.lower()
-                console_print(f"  进程名: {result['process_name']}")
             
-            # 获取完整路径
             exe_path = ctypes.create_unicode_buffer(260)
             if psapi.GetModuleFileNameExW(hProcess, None, exe_path, 260):
                 result['process_path'] = exe_path.value.lower()
-                console_print(f"  进程路径: {result['process_path']}")
-            
-            # 获取命令行（通过 WMI）
-            try:
-                import subprocess
-                cmd = f'wmic process where processid={pid} get commandline'
-                output = subprocess.check_output(cmd, shell=True, encoding='gbk', errors='ignore')
-                lines = output.strip().split('\n')
-                if len(lines) >= 2:
-                    result['process_cmdline'] = lines[1].strip().lower()
-                    console_print(f"  命令行: {result['process_cmdline'][:100]}")
-            except:
-                pass
-            
-            # 获取进程加载的模块
-            try:
-                MODULE_LIST = ctypes.c_void_p * 1024
-                modules = MODULE_LIST()
-                needed = ctypes.c_ulong()
-                
-                if psapi.EnumProcessModules(hProcess, modules, ctypes.sizeof(modules), ctypes.byref(needed)):
-                    module_count = needed.value // ctypes.sizeof(ctypes.c_void_p)
-                    console_print(f"  找到 {module_count} 个模块")
-                    
-                    for i in range(min(module_count, 20)):
-                        module_path = ctypes.create_unicode_buffer(260)
-                        if psapi.GetModuleFileNameExW(hProcess, modules[i], module_path, 260):
-                            module_name = os.path.basename(module_path.value).lower()
-                            if module_name.endswith(('.exe', '.dll', '.dat', '.bin')):
-                                if module_name not in result['modules']:
-                                    result['modules'].append(module_name)
-                                    if len(result['modules']) <= 10:
-                                        console_print(f"    模块: {module_name}")
-            except Exception as e:
-                console_print(f"  枚举模块失败: {e}")
             
             kernel32.CloseHandle(hProcess)
         else:
-            console_print(f"  无法打开进程 PID: {pid}, 错误码: {ctypes.GetLastError()}")
-            
-            # 方法2: 尝试使用 psutil
             try:
                 process = psutil.Process(pid)
                 result['process_name'] = process.name().lower()
                 result['process_path'] = process.exe().lower() if process.exe() else ''
-                console_print(f"  psutil 获取成功 - 进程名: {result['process_name']}")
-            except Exception as e:
-                console_print(f"  psutil 也失败: {e}")
-            
-            # 方法3: 通过窗口标题推断
-            window_text = win32gui.GetWindowText(hwnd)
-            if '征途' in window_text:
-                result['process_name'] = 'zhengtu.exe'
-                result['modules'] = ['zhengtu.dat']
-                console_print(f"  通过窗口标题推断: {result['process_name']}")
-    
+            except:
+                pass
     except Exception as e:
-        console_print(f"  获取进程信息异常: {e}")
+        console_print(f"获取进程信息异常: {e}")
     
     return result
+
 
 # ==================== 项目信息元数据 ====================
 class ProjectInfo:
     """项目信息元数据（集中管理所有项目相关信息）"""
-    VERSION = "1.1.10"
+    VERSION = "1.2.0"
     BUILD_DATE = "2026-03-26"
     AUTHOR = "杜玛"
     LICENSE = "GNU Affero General Public License v3.0"
     COPYRIGHT = "© 永久 杜玛"
     URL = "https://github.com/duma520/KeyForge"
     MAINTAINER_EMAIL = "不提供"
-    NAME = "KeyForge 后台按键测试工具终极版"
-    DESCRIPTION = "KeyForge 后台按键测试工具终极版，支持60+种按键发送方式、多种窗口枚举方式，并提供丰富的调试信息输出。适用于游戏测试、自动化操作等场景。"
+    NAME = "KeyForge 后台按键测试工具"
+    DESCRIPTION = "KeyForge 后台按键测试工具，支持多种按键发送方式、多种窗口枚举方式，并提供丰富的调试信息输出。"
     
     @classmethod
     def get_full_name(cls) -> str:
-        """获取完整的程序名称（带版本）"""
         return f"{cls.NAME} v{cls.VERSION}"
     
     @classmethod
     def get_full_title(cls, username: str = None) -> str:
-        """获取完整的窗口标题"""
         base = f"{cls.get_full_name()} 构建:{cls.BUILD_DATE}"
         if username:
             return f"{base} - 当前用户: {username}"
@@ -410,7 +279,6 @@ class ProjectInfo:
     
     @classmethod
     def get_about_text(cls) -> str:
-        """获取关于信息文本"""
         return f"""
         <h2>{cls.NAME}</h2>
         <p><b>版本:</b> {cls.VERSION}</p>
@@ -420,80 +288,8 @@ class ProjectInfo:
         <p><b>许可证:</b> {cls.LICENSE}</p>
         <p><b>项目主页:</b> <a href='{cls.URL}'>{cls.URL}</a></p>
         <p><b>描述:</b> {cls.DESCRIPTION}</p>
-        <p><b>支持按键方式:</b> 60+ 种</p>
+        <p><b>支持按键方式:</b> {BackendKeyMethod.get_total_count()} 种</p>
         """
-
-
-# ====================  马卡龙色系定义 ====================
-class MacaronColors:
-    """马卡龙色系完整定义"""
-    # 粉色系
-    PINK_SAKURA = QColor('#FFB7CE')      # 樱花粉
-    PINK_ROSE = QColor('#FF9AA2')        # 玫瑰粉
-    PINK_COTTON = QColor('#FFD1DC')      # 棉花粉
-    PINK_BALLET = QColor('#FCC9D3')      # 芭蕾粉
-    
-    # 蓝色系
-    BLUE_SKY = QColor('#A2E1F6')         # 天空蓝
-    BLUE_MIST = QColor('#C2E5F9')        # 雾霾蓝
-    BLUE_PERIWINKLE = QColor('#C5D0E6')  # 长春花蓝
-    BLUE_LAVENDER = QColor('#D6EAF8')    # 薰衣草蓝
-    
-    # 绿色系
-    GREEN_MINT = QColor('#B5EAD7')       # 薄荷绿
-    GREEN_APPLE = QColor('#D4F1C7')      # 苹果绿
-    GREEN_PISTACHIO = QColor('#D8E9D6')  # 开心果绿
-    GREEN_SAGE = QColor('#C9DFC5')       # 鼠尾草绿
-    
-    # 黄色/橙色系
-    YELLOW_LEMON = QColor('#FFEAA5')      # 柠檬黄
-    YELLOW_CREAM = QColor('#FFF8B8')      # 奶油黄
-    YELLOW_HONEY = QColor('#FCE5B4')      # 蜂蜜黄
-    ORANGE_PEACH = QColor('#FFDAC1')      # 蜜桃橙
-    ORANGE_APRICOT = QColor('#FDD9B5')    # 杏色
-    
-    # 紫色系
-    PURPLE_LAVENDER = QColor('#C7CEEA')   # 薰衣草紫
-    PURPLE_TARO = QColor('#D8BFD8')       # 香芋紫
-    PURPLE_WISTERIA = QColor('#C9B6D9')   # 紫藤
-    PURPLE_MAUVE = QColor('#E0C7D7')      # 淡紫
-    
-    # 中性色
-    NEUTRAL_CARAMEL = QColor('#F0E6DD')   # 焦糖奶霜
-    NEUTRAL_CREAM = QColor('#F7F1E5')     # 奶油白
-    NEUTRAL_MOCHA = QColor('#EAD7C7')     # 摩卡
-    NEUTRAL_ALMOND = QColor('#F2E4D4')    # 杏仁
-    
-    # 其他颜色
-    RED_CORAL = QColor('#FFB3A7')          # 珊瑚红
-    RED_WATERMELON = QColor('#FFC5C5')     # 西瓜红
-    TEAL_MINT = QColor('#B8E2DE')          # 薄荷绿蓝
-    
-    @classmethod
-    def get_color_list(cls):
-        """获取所有马卡龙颜色列表"""
-        return [
-            cls.PINK_SAKURA, cls.PINK_ROSE, cls.PINK_COTTON, cls.PINK_BALLET,
-            cls.BLUE_SKY, cls.BLUE_MIST, cls.BLUE_PERIWINKLE, cls.BLUE_LAVENDER,
-            cls.GREEN_MINT, cls.GREEN_APPLE, cls.GREEN_PISTACHIO, cls.GREEN_SAGE,
-            cls.YELLOW_LEMON, cls.YELLOW_CREAM, cls.YELLOW_HONEY, cls.ORANGE_PEACH,
-            cls.ORANGE_APRICOT, cls.PURPLE_LAVENDER, cls.PURPLE_TARO, cls.PURPLE_WISTERIA,
-            cls.PURPLE_MAUVE, cls.NEUTRAL_CARAMEL, cls.NEUTRAL_CREAM, cls.NEUTRAL_MOCHA,
-            cls.NEUTRAL_ALMOND, cls.RED_CORAL, cls.RED_WATERMELON, cls.TEAL_MINT
-        ]
-    
-    @classmethod
-    def get_color_names(cls):
-        """获取马卡龙颜色名称列表"""
-        return [
-            "樱花粉", "玫瑰粉", "棉花粉", "芭蕾粉",
-            "天空蓝", "雾霾蓝", "长春花蓝", "薰衣草蓝",
-            "薄荷绿", "苹果绿", "开心果绿", "鼠尾草绿",
-            "柠檬黄", "奶油黄", "蜂蜜黄", "蜜桃橙",
-            "杏色", "薰衣草紫", "香芋紫", "紫藤",
-            "淡紫", "焦糖奶霜", "奶油白", "摩卡",
-            "杏仁", "珊瑚红", "西瓜红", "薄荷绿蓝"
-        ]
 
 
 # 增强的按键发送类
@@ -501,7 +297,7 @@ class EnhancedKeyPressThread(QThread):
     progress_updated = Signal(int)
     status_updated = Signal(str)
     log_message = Signal(str)
-    loop_count_updated = Signal(int)  # 新增：发送轮数更新信号
+    loop_count_updated = Signal(int)
     
     def __init__(self):
         super().__init__()
@@ -510,27 +306,13 @@ class EnhancedKeyPressThread(QThread):
         self.key_type = "A"
         self.method = BackendKeyMethod.SENDMESSAGE
         self.delay = 1.0
-        self.repeat_count = 1  # 重复次数，0表示无限循环
+        self.repeat_count = 1
         
-        # 组合键标志
-        self.modifiers = []  # 存储选中的组合键名称列表
+        self.modifiers = []
         
-        # 高级选项
-        self.use_scan_code = False  # 使用扫描码
-        self.extended_key = False   # 扩展键标志
-        self.repeat_speed = 0       # 重复速度
-        self.extra_flags = 0        # 额外标志
-        
-        # 添加一个锁来保护参数
         self.param_lock = threading.Lock()
-        
-        # 当前发送进度
-        self.current_loop = 0  # 当前完成的轮数
-        self.total_windows = 0  # 窗口总数
-        
-        # 钩子相关
-        self.hook_handle = None
-        self.hook_thread_id = None
+        self.current_loop = 0
+        self.total_windows = 0
         
     def update_parameters(self, key_type, method, delay, repeat_count, modifiers=None):
         """动态更新参数"""
@@ -549,7 +331,6 @@ class EnhancedKeyPressThread(QThread):
         
     def get_vk_code(self, key_type):
         """获取虚拟键码"""
-        # 支持自定义输入（十六进制或数字）
         if key_type.startswith("0x") or key_type.startswith("0X"):
             try:
                 return int(key_type, 16)
@@ -560,9 +341,7 @@ class EnhancedKeyPressThread(QThread):
                 return int(key_type)
             except:
                 pass
-        
-        # 从映射表中获取
-        return KEY_MAP.get(key_type, 0x41)  # 默认返回A
+        return KEY_MAP.get(key_type, 0x41)
     
     def get_modifier_codes(self, modifiers):
         """获取组合键的虚拟键码列表"""
@@ -572,16 +351,25 @@ class EnhancedKeyPressThread(QThread):
                 codes.append(MODIFIER_KEYS[mod])
         return codes
     
-    def send_keybd_event(self, vk_code, is_down, scan_code=0, flags=0):
+    def get_modifier_flags(self):
+        """获取组合键的MOD_标志"""
+        flags = 0
+        if "Alt" in self.modifiers:
+            flags |= 0x0001
+        if "Ctrl" in self.modifiers:
+            flags |= 0x0002
+        if "Shift" in self.modifiers:
+            flags |= 0x0004
+        if "Win" in self.modifiers:
+            flags |= 0x0008
+        return flags
+    
+    def send_keybd_event(self, vk_code, is_down):
         """使用keybd_event发送按键"""
         flags_val = 0 if is_down else win32con.KEYEVENTF_KEYUP
-        if scan_code:
-            flags_val |= win32con.KEYEVENTF_SCANCODE
-        if self.extended_key:
-            flags_val |= win32con.KEYEVENTF_EXTENDEDKEY
-        ctypes.windll.user32.keybd_event(vk_code, scan_code, flags_val, 0)
+        ctypes.windll.user32.keybd_event(vk_code, 0, flags_val, 0)
     
-    def send_sendinput(self, vk_code, is_down, scan_code=0):
+    def send_sendinput(self, vk_code, is_down):
         """使用SendInput发送按键"""
         INPUT_KEYBOARD = 1
         class KEYBDINPUT(ctypes.Structure):
@@ -596,25 +384,10 @@ class EnhancedKeyPressThread(QThread):
                        ("ki", KEYBDINPUT)]
         
         flags = 0 if is_down else win32con.KEYEVENTF_KEYUP
-        if scan_code:
-            flags |= win32con.KEYEVENTF_SCANCODE
-        if self.extended_key:
-            flags |= win32con.KEYEVENTF_EXTENDEDKEY
-            
         input_struct = INPUT()
         input_struct.type = INPUT_KEYBOARD
-        input_struct.ki = KEYBDINPUT(vk_code, scan_code, flags, 0, 0)
+        input_struct.ki = KEYBDINPUT(vk_code, 0, flags, 0, 0)
         ctypes.windll.user32.SendInput(1, ctypes.byref(input_struct), ctypes.sizeof(INPUT))
-    
-    def send_mouse_event(self, vk_code, is_down):
-        """使用mouse_event模拟按键（某些游戏专用）"""
-        # mouse_event 也可以发送键盘事件
-        if vk_code == 0x0D:  # Enter
-            flags = win32con.MOUSEEVENTF_LEFTDOWN if is_down else win32con.MOUSEEVENTF_LEFTUP
-            ctypes.windll.user32.mouse_event(flags, 0, 0, 0, 0)
-        else:
-            # 回退到 keybd_event
-            self.send_keybd_event(vk_code, is_down)
     
     def send_attach_thread_input(self, hwnd, vk_code, is_down):
         """使用AttachThreadInput方式"""
@@ -622,56 +395,30 @@ class EnhancedKeyPressThread(QThread):
             current_thread = win32api.GetCurrentThreadId()
             target_thread = win32process.GetWindowThreadProcessId(hwnd)[0]
             
-            # 附加线程输入
             win32process.AttachThreadInput(current_thread, target_thread, True)
-            
-            # 发送按键
             self.send_keybd_event(vk_code, is_down)
-            
-            # 分离线程
             win32process.AttachThreadInput(current_thread, target_thread, False)
             return True
         except Exception as e:
             self.log_message.emit(f"AttachThreadInput错误: {e}")
             return False
     
-    def send_low_level_hook(self, vk_code, is_down):
-        """使用低级键盘钩子发送按键"""
-        # 这通常用于全局钩子，比较复杂，简化实现
-        self.send_keybd_event(vk_code, is_down)
-        self.log_message.emit("低级键盘钩子方式已激活")
-    
-    def send_scan_code(self, hwnd, vk_code, is_down):
-        """使用扫描码方式发送"""
-        # 获取扫描码
-        scan_code = ctypes.windll.user32.MapVirtualKeyW(vk_code, 0)
-        self.send_keybd_event(vk_code, is_down, scan_code)
-    
-    def send_extended_key(self, hwnd, vk_code, is_down):
-        """使用扩展键标志发送"""
-        self.extended_key = True
-        self.send_keybd_event(vk_code, is_down)
-        self.extended_key = False
-    
     def send_wm_hotkey(self, hwnd, vk_code, is_down):
         """使用WM_HOTKEY消息"""
         if is_down:
-            # 注册热键
             hotkey_id = 1
-            win32gui.RegisterHotKey(hwnd, hotkey_id, 0, vk_code)
-            # 发送消息
-            win32gui.PostMessage(hwnd, win32con.WM_HOTKEY, hotkey_id, 0)
-            win32gui.UnregisterHotKey(hwnd, hotkey_id)
+            try:
+                win32gui.RegisterHotKey(hwnd, hotkey_id, self.get_modifier_flags(), vk_code)
+                win32gui.PostMessage(hwnd, win32con.WM_HOTKEY, hotkey_id, 0)
+                win32gui.UnregisterHotKey(hwnd, hotkey_id)
+            except:
+                pass
         return True
     
     def send_wm_appcommand(self, hwnd, vk_code, is_down):
         """使用WM_APPCOMMAND消息"""
-        # WM_APPCOMMAND 通常用于多媒体键
         if is_down:
-            # APPCOMMAND 常量
-            APPCOMMAND_BROWSER_BACK = 1
-            win32gui.PostMessage(hwnd, win32con.WM_APPCOMMAND, 0, 
-                                APPCOMMAND_BROWSER_BACK << 16)
+            win32gui.PostMessage(hwnd, win32con.WM_APPCOMMAND, 0, vk_code << 16)
         return True
     
     def send_broadcast_msg(self, vk_code, is_down):
@@ -682,10 +429,39 @@ class EnhancedKeyPressThread(QThread):
                 0, win32con.WM_KEYDOWN, vk_code, 0)
         return True
     
+    def send_scan_code(self, hwnd, vk_code, is_down):
+        """扫描码方式"""
+        try:
+            scan_code = ctypes.windll.user32.MapVirtualKeyW(vk_code, 0)
+            lParam = (scan_code << 16) | (1 if is_down else 0xC0000000)
+            if is_down:
+                win32gui.PostMessage(hwnd, win32con.WM_KEYDOWN, vk_code, lParam)
+            else:
+                win32gui.PostMessage(hwnd, win32con.WM_KEYUP, vk_code, lParam)
+            return True
+        except Exception as e:
+            self.log_message.emit(f"扫描码方式错误: {e}")
+            return False
+    
+    def send_extended_key(self, hwnd, vk_code, is_down):
+        """扩展键标志方式"""
+        try:
+            scan_code = ctypes.windll.user32.MapVirtualKeyW(vk_code, 0)
+            extended = 1
+            lParam = (1 & 0xFFFF) | ((scan_code & 0xFF) << 16) | ((extended & 1) << 24)
+            if is_down:
+                win32gui.PostMessage(hwnd, win32con.WM_KEYDOWN, vk_code, lParam)
+            else:
+                lParam |= (1 << 30) | (1 << 31)
+                win32gui.PostMessage(hwnd, win32con.WM_KEYUP, vk_code, lParam)
+            return True
+        except Exception as e:
+            self.log_message.emit(f"扩展键标志错误: {e}")
+            return False
+    
     def send_wm_copydata(self, hwnd, vk_code, is_down):
         """使用WM_COPYDATA发送"""
         if is_down:
-            import struct
             class COPYDATASTRUCT(ctypes.Structure):
                 _fields_ = [
                     ("dwData", ctypes.c_ulong),
@@ -695,9 +471,9 @@ class EnhancedKeyPressThread(QThread):
             
             data = struct.pack('I', vk_code)
             cds = COPYDATASTRUCT()
-            cds.dwData = 1
+            cds.dwData = 0x4B455900
             cds.cbData = len(data)
-            cds.lpData = ctypes.addressof(ctypes.c_char_p(data))
+            cds.lpData = ctypes.addressof(ctypes.create_string_buffer(data))
             
             win32gui.SendMessage(hwnd, win32con.WM_COPYDATA, 0, cds)
         return True
@@ -711,7 +487,6 @@ class EnhancedKeyPressThread(QThread):
             win32clipboard.SetClipboardText(key_type)
             win32clipboard.CloseClipboard()
             
-            # 发送粘贴命令 (Ctrl+V)
             for hwnd in self.selected_windows:
                 win32gui.PostMessage(hwnd, win32con.WM_KEYDOWN, 0x11, 0)
                 time.sleep(0.02)
@@ -725,134 +500,22 @@ class EnhancedKeyPressThread(QThread):
             self.log_message.emit(f"剪贴板方式错误: {e}")
             return False
     
-    def send_remote_input(self, vk_code, is_down):
-        """远程输入模拟"""
-        # 简单的远程输入可以通过发送WM_KEYDOWN实现
-        for hwnd in self.selected_windows:
-            if is_down:
-                win32gui.PostMessage(hwnd, win32con.WM_KEYDOWN, vk_code, 0)
-            else:
-                win32gui.PostMessage(hwnd, win32con.WM_KEYUP, vk_code, 0)
-        return True
-    
-    def send_key_with_modifiers(self, hwnd, vk_code, method, char_code=0):
-        """
-        发送带组合键的按键
-        返回是否成功
-        """
+    def send_com_object(self, vk_code, is_down):
+        """COM对象调用"""
         try:
-            # 获取当前激活的组合键
-            modifier_codes = self.get_modifier_codes(self.modifiers)
-            
-            # 根据不同的方法处理组合键
-            # 对于全局方法（keybd_event, SendInput），直接模拟按键
-            if method == BackendKeyMethod.KEYBD_EVENT:
-                # 按下所有组合键
-                for mod_code in modifier_codes:
-                    self.send_keybd_event(mod_code, True)
-                    time.sleep(0.01)
-                
-                # 按下并释放主键
-                self.send_keybd_event(vk_code, True)
-                time.sleep(0.02)
-                self.send_keybd_event(vk_code, False)
-                time.sleep(0.01)
-                
-                # 释放所有组合键（逆序）
-                for mod_code in reversed(modifier_codes):
-                    self.send_keybd_event(mod_code, False)
-                    time.sleep(0.01)
-                    
-                return True
-                
-            elif method == BackendKeyMethod.SENDINPUT:
-                # 按下所有组合键
-                for mod_code in modifier_codes:
-                    self.send_sendinput(mod_code, True)
-                    time.sleep(0.01)
-                
-                # 按下并释放主键
-                self.send_sendinput(vk_code, True)
-                time.sleep(0.02)
-                self.send_sendinput(vk_code, False)
-                time.sleep(0.01)
-                
-                # 释放所有组合键（逆序）
-                for mod_code in reversed(modifier_codes):
-                    self.send_sendinput(mod_code, False)
-                    time.sleep(0.01)
-                    
-                return True
-                
-            elif method in [BackendKeyMethod.SENDMESSAGE, BackendKeyMethod.POSTMESSAGE, 
-                            BackendKeyMethod.WM_KEYDOWN_DIRECT, BackendKeyMethod.POSTMESSAGE_LPARAM,
-                            BackendKeyMethod.WM_SYSKEYDOWN]:
-                # 对于窗口消息方式，需要发送带修饰键状态的消息
-                def make_lparam(repeat, scan, extended, context, previous):
-                    return (repeat & 0xFFFF) | ((scan & 0xFF) << 16) | \
-                           ((extended & 1) << 24) | ((context & 1) << 29) | \
-                           ((previous & 1) << 30)
-                
-                # 首先发送组合键的按下消息
-                for mod_code in modifier_codes:
-                    if method == BackendKeyMethod.SENDMESSAGE:
-                        win32gui.SendMessage(hwnd, win32con.WM_KEYDOWN, mod_code, 0)
-                    else:
-                        win32gui.PostMessage(hwnd, win32con.WM_KEYDOWN, mod_code, 0)
-                    time.sleep(0.01)
-                
-                # 发送主键消息
-                if method == BackendKeyMethod.SENDMESSAGE:
-                    win32gui.SendMessage(hwnd, win32con.WM_KEYDOWN, vk_code, 0)
-                    time.sleep(0.02)
-                    win32gui.SendMessage(hwnd, win32con.WM_KEYUP, vk_code, 0)
+            import win32com.client
+            shell = win32com.client.Dispatch("WScript.Shell")
+            if is_down:
+                if 32 <= vk_code <= 126:
+                    shell.SendKeys(chr(vk_code))
                 else:
-                    lParam = make_lparam(1, 0, 0, 0, 0)
-                    win32gui.PostMessage(hwnd, win32con.WM_KEYDOWN, vk_code, lParam)
-                    time.sleep(0.02)
-                    lParam_up = make_lparam(1, 0, 0, 1, 1)
-                    win32gui.PostMessage(hwnd, win32con.WM_KEYUP, vk_code, lParam_up)
-                time.sleep(0.01)
-                
-                # 释放组合键（逆序）
-                for mod_code in reversed(modifier_codes):
-                    if method == BackendKeyMethod.SENDMESSAGE:
-                        win32gui.SendMessage(hwnd, win32con.WM_KEYUP, mod_code, 0)
-                    else:
-                        win32gui.PostMessage(hwnd, win32con.WM_KEYUP, mod_code, 0)
-                    time.sleep(0.01)
-                    
-                return True
-                
-            elif method == BackendKeyMethod.WM_CHAR:
-                # WM_CHAR 方式，组合键可能不生效，直接发送字符
-                if char_code:
-                    win32gui.PostMessage(hwnd, win32con.WM_CHAR, char_code, 0)
-                    return True
-                else:
-                    return self.send_key_with_modifiers(hwnd, vk_code, BackendKeyMethod.POSTMESSAGE, char_code)
-                    
-            elif method == BackendKeyMethod.ATTACH_THREAD:
-                return self.send_attach_thread_input(hwnd, vk_code, True) and \
-                       self.send_attach_thread_input(hwnd, vk_code, False)
-            elif method == BackendKeyMethod.SCAN_CODE:
-                return self.send_scan_code(hwnd, vk_code, True) and \
-                       self.send_scan_code(hwnd, vk_code, False)
-            elif method == BackendKeyMethod.WM_HOTKEY:
-                return self.send_wm_hotkey(hwnd, vk_code, True)
-            elif method == BackendKeyMethod.WM_COPYDATA:
-                return self.send_wm_copydata(hwnd, vk_code, True)
-            elif method == BackendKeyMethod.CLIPBOARD:
-                return self.send_clipboard(chr(vk_code) if 32 <= vk_code <= 126 else str(vk_code))
-                    
-            else:
-                # 其他方法回退到 POSTMESSAGE
-                return self.send_key_with_modifiers(hwnd, vk_code, BackendKeyMethod.POSTMESSAGE, char_code)
-                
+                    shell.SendKeys('{' + self.key_type.upper() + '}')
+            return True
         except Exception as e:
-            self.log_message.emit(f"组合键发送错误: {str(e)}")
+            self.log_message.emit(f"COM对象错误: {e}")
             return False
     
+    # ==================== 不带组合键的发送方法 ====================
     def send_key_without_modifiers(self, hwnd, vk_code, method, char_code=0):
         """发送不带组合键的按键"""
         try:
@@ -923,72 +586,35 @@ class EnhancedKeyPressThread(QThread):
                 win32gui.PostMessage(hwnd, win32con.WM_KEYUP, vk_code, lParam_up)
                 return True
                 
-            elif method == BackendKeyMethod.MOUSE_EVENT:
-                self.send_mouse_event(vk_code, True)
-                time.sleep(0.02)
-                self.send_mouse_event(vk_code, False)
-                return True
-                
-            elif method == BackendKeyMethod.KEYBD_EVENT_EX:
-                self.send_keybd_event(vk_code, True, 0, 0)
-                time.sleep(0.02)
-                self.send_keybd_event(vk_code, False, 0, 0)
-                return True
-                
-            elif method == BackendKeyMethod.SENDINPUT_WAIT:
-                self.send_sendinput(vk_code, True)
-                time.sleep(self.delay)
-                self.send_sendinput(vk_code, False)
-                return True
-                
-            elif method == BackendKeyMethod.ATTACH_THREAD:
-                return self.send_attach_thread_input(hwnd, vk_code, True) and \
-                       self.send_attach_thread_input(hwnd, vk_code, False)
-                       
-            elif method == BackendKeyMethod.JOURNAL_PLAYBACK:
-                # 简化实现，使用keybd_event
-                self.send_keybd_event(vk_code, True)
-                time.sleep(0.02)
-                self.send_keybd_event(vk_code, False)
-                return True
-                
-            elif method == BackendKeyMethod.LOW_LEVEL_HOOK:
-                self.send_low_level_hook(vk_code, True)
-                time.sleep(0.02)
-                self.send_low_level_hook(vk_code, False)
-                return True
-                
-            elif method == BackendKeyMethod.VIRTUAL_KEY_EX:
-                self.send_keybd_event(vk_code, True)
-                time.sleep(0.02)
-                self.send_keybd_event(vk_code, False)
-                return True
-                
-            elif method == BackendKeyMethod.SCAN_CODE:
-                self.send_scan_code(hwnd, vk_code, True)
-                time.sleep(0.02)
-                self.send_scan_code(hwnd, vk_code, False)
-                return True
-                
-            elif method == BackendKeyMethod.EXTENDED_KEY:
-                self.send_extended_key(hwnd, vk_code, True)
-                time.sleep(0.02)
-                self.send_extended_key(hwnd, vk_code, False)
-                return True
-                
-            elif method == BackendKeyMethod.REMOTE_INPUT:
-                return self.send_remote_input(vk_code, True) and \
-                       self.send_remote_input(vk_code, False)
-                       
             elif method == BackendKeyMethod.WM_HOTKEY:
                 return self.send_wm_hotkey(hwnd, vk_code, True)
                 
             elif method == BackendKeyMethod.WM_APPCOMMAND:
                 return self.send_wm_appcommand(hwnd, vk_code, True)
                 
+            elif method == BackendKeyMethod.SENDMESSAGE_TIMEOUT:
+                ctypes.windll.user32.SendMessageTimeoutW(
+                    hwnd, win32con.WM_KEYDOWN, vk_code, 0, 0x0002, 1000, None)
+                time.sleep(0.02)
+                ctypes.windll.user32.SendMessageTimeoutW(
+                    hwnd, win32con.WM_KEYUP, vk_code, 0, 0x0002, 1000, None)
+                return True
+                
             elif method == BackendKeyMethod.BROADCAST_MSG:
                 return self.send_broadcast_msg(vk_code, True) and \
                        self.send_broadcast_msg(vk_code, False)
+                
+            elif method == BackendKeyMethod.ATTACH_THREAD:
+                return self.send_attach_thread_input(hwnd, vk_code, True) and \
+                       self.send_attach_thread_input(hwnd, vk_code, False)
+                       
+            elif method == BackendKeyMethod.SCAN_CODE:
+                return self.send_scan_code(hwnd, vk_code, True) and \
+                       self.send_scan_code(hwnd, vk_code, False)
+                       
+            elif method == BackendKeyMethod.EXTENDED_KEY:
+                return self.send_extended_key(hwnd, vk_code, True) and \
+                       self.send_extended_key(hwnd, vk_code, False)
                        
             elif method == BackendKeyMethod.WM_COPYDATA:
                 return self.send_wm_copydata(hwnd, vk_code, True)
@@ -996,33 +622,11 @@ class EnhancedKeyPressThread(QThread):
             elif method == BackendKeyMethod.CLIPBOARD:
                 return self.send_clipboard(chr(vk_code) if 32 <= vk_code <= 126 else str(vk_code))
                 
-            elif method == BackendKeyMethod.GDI_INPUT:
-                # GDI输入简化实现
-                self.send_keybd_event(vk_code, True)
-                time.sleep(0.02)
-                self.send_keybd_event(vk_code, False)
-                return True
-                
-            elif method == BackendKeyMethod.RAW_INPUT:
-                self.send_keybd_event(vk_code, True)
-                time.sleep(0.02)
-                self.send_keybd_event(vk_code, False)
-                return True
-                
-            elif method == BackendKeyMethod.GAME_CONTROLLER:
-                self.send_keybd_event(vk_code, True)
-                time.sleep(0.02)
-                self.send_keybd_event(vk_code, False)
-                return True
-                
-            elif method == BackendKeyMethod.MACRO_PLAYBACK:
-                self.send_keybd_event(vk_code, True)
-                time.sleep(0.02)
-                self.send_keybd_event(vk_code, False)
-                return True
+            elif method == BackendKeyMethod.COM_OBJECT:
+                return self.send_com_object(vk_code, True) and \
+                       self.send_com_object(vk_code, False)
                 
             else:
-                # 其他方法简化处理
                 win32gui.PostMessage(hwnd, win32con.WM_KEYDOWN, vk_code, 0)
                 time.sleep(0.02)
                 win32gui.PostMessage(hwnd, win32con.WM_KEYUP, vk_code, 0)
@@ -1032,24 +636,221 @@ class EnhancedKeyPressThread(QThread):
             self.log_message.emit(f"错误: {str(e)}")
             return False
     
+    # ==================== 带组合键的发送方法 ====================
+    def send_key_with_modifiers(self, hwnd, vk_code, method, char_code=0):
+        """发送带组合键的按键"""
+        try:
+            modifier_codes = self.get_modifier_codes(self.modifiers)
+            
+            if not modifier_codes:
+                return self.send_key_without_modifiers(hwnd, vk_code, method, char_code)
+            
+            # 全局输入模拟方法
+            if method in [BackendKeyMethod.KEYBD_EVENT, BackendKeyMethod.SENDINPUT]:
+                for mod_code in modifier_codes:
+                    self.send_keybd_event(mod_code, True)
+                    time.sleep(0.005)
+                
+                self.send_keybd_event(vk_code, True)
+                time.sleep(0.02)
+                self.send_keybd_event(vk_code, False)
+                time.sleep(0.005)
+                
+                for mod_code in reversed(modifier_codes):
+                    self.send_keybd_event(mod_code, False)
+                    time.sleep(0.005)
+                return True
+            
+            # 窗口消息发送方法
+            elif method in [BackendKeyMethod.SENDMESSAGE, BackendKeyMethod.POSTMESSAGE,
+                            BackendKeyMethod.WM_KEYDOWN_DIRECT, BackendKeyMethod.POSTMESSAGE_LPARAM,
+                            BackendKeyMethod.WM_SYSKEYDOWN, BackendKeyMethod.SENDMESSAGE_TIMEOUT]:
+                
+                def make_lparam(repeat, scan, extended, context, previous):
+                    return (repeat & 0xFFFF) | ((scan & 0xFF) << 16) | \
+                           ((extended & 1) << 24) | ((context & 1) << 29) | \
+                           ((previous & 1) << 30)
+                
+                for mod_code in modifier_codes:
+                    if method == BackendKeyMethod.SENDMESSAGE:
+                        win32gui.SendMessage(hwnd, win32con.WM_KEYDOWN, mod_code, 0)
+                    elif method == BackendKeyMethod.SENDMESSAGE_TIMEOUT:
+                        ctypes.windll.user32.SendMessageTimeoutW(
+                            hwnd, win32con.WM_KEYDOWN, mod_code, 0, 0x0002, 1000, None)
+                    else:
+                        win32gui.PostMessage(hwnd, win32con.WM_KEYDOWN, mod_code, 0)
+                    time.sleep(0.005)
+                
+                if method == BackendKeyMethod.SENDMESSAGE:
+                    win32gui.SendMessage(hwnd, win32con.WM_KEYDOWN, vk_code, 0)
+                    time.sleep(0.02)
+                    win32gui.SendMessage(hwnd, win32con.WM_KEYUP, vk_code, 0)
+                elif method == BackendKeyMethod.SENDMESSAGE_TIMEOUT:
+                    ctypes.windll.user32.SendMessageTimeoutW(
+                        hwnd, win32con.WM_KEYDOWN, vk_code, 0, 0x0002, 1000, None)
+                    time.sleep(0.02)
+                    ctypes.windll.user32.SendMessageTimeoutW(
+                        hwnd, win32con.WM_KEYUP, vk_code, 0, 0x0002, 1000, None)
+                elif method == BackendKeyMethod.BROADCAST_MSG:
+                    win32gui.BroadcastSystemMessage(
+                        win32con.BSF_IGNORECURRENTTASK | win32con.BSF_POSTMESSAGE,
+                        0, win32con.WM_KEYDOWN, vk_code, 0)
+                    time.sleep(0.02)
+                    win32gui.BroadcastSystemMessage(
+                        win32con.BSF_IGNORECURRENTTASK | win32con.BSF_POSTMESSAGE,
+                        0, win32con.WM_KEYUP, vk_code, 0)
+                else:
+                    lParam = make_lparam(1, 0, 0, 0, 0)
+                    win32gui.PostMessage(hwnd, win32con.WM_KEYDOWN, vk_code, lParam)
+                    time.sleep(0.02)
+                    lParam_up = make_lparam(1, 0, 0, 1, 1)
+                    win32gui.PostMessage(hwnd, win32con.WM_KEYUP, vk_code, lParam_up)
+                
+                time.sleep(0.005)
+                
+                for mod_code in reversed(modifier_codes):
+                    if method == BackendKeyMethod.SENDMESSAGE:
+                        win32gui.SendMessage(hwnd, win32con.WM_KEYUP, mod_code, 0)
+                    elif method == BackendKeyMethod.SENDMESSAGE_TIMEOUT:
+                        ctypes.windll.user32.SendMessageTimeoutW(
+                            hwnd, win32con.WM_KEYUP, mod_code, 0, 0x0002, 1000, None)
+                    else:
+                        win32gui.PostMessage(hwnd, win32con.WM_KEYUP, mod_code, 0)
+                    time.sleep(0.005)
+                return True
+            
+            # 扫描码/扩展键方式
+            elif method in [BackendKeyMethod.SCAN_CODE, BackendKeyMethod.EXTENDED_KEY]:
+                scan_code = ctypes.windll.user32.MapVirtualKeyW(vk_code, 0)
+                extended = 1 if method == BackendKeyMethod.EXTENDED_KEY else 0
+                
+                def make_lparam_scan(repeat, scan, extended, context, previous):
+                    return (repeat & 0xFFFF) | ((scan & 0xFF) << 16) | \
+                           ((extended & 1) << 24) | ((context & 1) << 29) | \
+                           ((previous & 1) << 30)
+                
+                for mod_code in modifier_codes:
+                    mod_scan = ctypes.windll.user32.MapVirtualKeyW(mod_code, 0)
+                    lParam_mod = make_lparam_scan(1, mod_scan, 0, 0, 0)
+                    win32gui.PostMessage(hwnd, win32con.WM_KEYDOWN, mod_code, lParam_mod)
+                    time.sleep(0.005)
+                
+                lParam = make_lparam_scan(1, scan_code, extended, 0, 0)
+                win32gui.PostMessage(hwnd, win32con.WM_KEYDOWN, vk_code, lParam)
+                time.sleep(0.02)
+                lParam_up = make_lparam_scan(1, scan_code, extended, 1, 1)
+                win32gui.PostMessage(hwnd, win32con.WM_KEYUP, vk_code, lParam_up)
+                time.sleep(0.005)
+                
+                for mod_code in reversed(modifier_codes):
+                    mod_scan = ctypes.windll.user32.MapVirtualKeyW(mod_code, 0)
+                    lParam_mod_up = make_lparam_scan(1, mod_scan, 0, 1, 1)
+                    win32gui.PostMessage(hwnd, win32con.WM_KEYUP, mod_code, lParam_mod_up)
+                    time.sleep(0.005)
+                return True
+            
+            # 线程附加方式
+            elif method == BackendKeyMethod.ATTACH_THREAD:
+                try:
+                    current_thread = win32api.GetCurrentThreadId()
+                    target_thread = win32process.GetWindowThreadProcessId(hwnd)[0]
+                    
+                    win32process.AttachThreadInput(current_thread, target_thread, True)
+                    old_focus = win32gui.GetFocus()
+                    win32gui.SetFocus(hwnd)
+                    
+                    for mod_code in modifier_codes:
+                        self.send_keybd_event(mod_code, True)
+                        time.sleep(0.005)
+                    
+                    self.send_keybd_event(vk_code, True)
+                    time.sleep(0.02)
+                    self.send_keybd_event(vk_code, False)
+                    time.sleep(0.005)
+                    
+                    for mod_code in reversed(modifier_codes):
+                        self.send_keybd_event(mod_code, False)
+                        time.sleep(0.005)
+                    
+                    if old_focus:
+                        win32gui.SetFocus(old_focus)
+                    
+                    win32process.AttachThreadInput(current_thread, target_thread, False)
+                    return True
+                except Exception as e:
+                    self.log_message.emit(f"线程附加方式错误: {e}")
+                    return False
+            
+            # 字符消息方式
+            elif method == BackendKeyMethod.WM_CHAR:
+                if char_code:
+                    win32gui.PostMessage(hwnd, win32con.WM_CHAR, char_code, 0)
+                    return True
+                else:
+                    return self.send_key_with_modifiers(hwnd, vk_code, BackendKeyMethod.POSTMESSAGE, char_code)
+            
+            elif method == BackendKeyMethod.WM_IME_CHAR:
+                if char_code:
+                    win32gui.PostMessage(hwnd, win32con.WM_IME_CHAR, char_code, 0)
+                else:
+                    win32gui.PostMessage(hwnd, win32con.WM_IME_CHAR, vk_code, 0)
+                return True
+            
+            # 热键方式
+            elif method == BackendKeyMethod.WM_HOTKEY:
+                hotkey_id = 1
+                try:
+                    win32gui.RegisterHotKey(hwnd, hotkey_id, self.get_modifier_flags(), vk_code)
+                    win32gui.PostMessage(hwnd, win32con.WM_HOTKEY, hotkey_id, 0)
+                    win32gui.UnregisterHotKey(hwnd, hotkey_id)
+                    return True
+                except:
+                    return self.send_key_with_modifiers(hwnd, vk_code, BackendKeyMethod.POSTMESSAGE, char_code)
+            
+            # COM对象方式
+            elif method == BackendKeyMethod.COM_OBJECT:
+                try:
+                    import win32com.client
+                    shell = win32com.client.Dispatch("WScript.Shell")
+                    
+                    modifier_map = {"Ctrl": "^", "Alt": "%", "Shift": "+", "Win": "#"}
+                    key_str = ""
+                    for mod in self.modifiers:
+                        if mod in modifier_map:
+                            key_str += modifier_map[mod]
+                    
+                    if 32 <= vk_code <= 126:
+                        key_str += chr(vk_code)
+                    else:
+                        key_str += "{" + self.key_type.upper() + "}"
+                    
+                    shell.SendKeys(key_str)
+                    return True
+                except Exception as e:
+                    self.log_message.emit(f"COM对象方式错误: {e}")
+                    return False
+            
+            else:
+                return self.send_key_with_modifiers(hwnd, vk_code, BackendKeyMethod.POSTMESSAGE, char_code)
+                    
+        except Exception as e:
+            self.log_message.emit(f"组合键发送错误: {str(e)}")
+            return False
+    
+    # ==================== 主发送方法 ====================
     def send_key_to_window_advanced(self, hwnd, key_type, method):
         """增强的按键发送方法（支持组合键）"""
         vk_code = self.get_vk_code(key_type)
-        
-        # 获取字符码（用于WM_CHAR等）
         char_code = 0
         if len(key_type) == 1:
             char_code = ord(key_type[0])
         
-        # 检查是否有组合键
         has_modifiers = len(self.modifiers) > 0
         
-        # 构建组合键信息字符串
         modifier_str = ""
         if has_modifiers:
             modifier_str = " + ".join(self.modifiers) + " + "
         
-        # 发送按键
         if has_modifiers:
             success = self.send_key_with_modifiers(hwnd, vk_code, method, char_code)
             if success:
@@ -1064,30 +865,24 @@ class EnhancedKeyPressThread(QThread):
     def run(self):
         self.running = True
         
-        # 获取初始参数
         key_type, method, delay, repeat_count, modifiers = self.get_parameters()
-        is_infinite = (repeat_count == 0)  # 0表示无限循环
+        is_infinite = (repeat_count == 0)
         
-        # 初始化进度相关变量
         self.total_windows = len(self.selected_windows)
         if is_infinite:
-            total_operations = 0  # 无限模式没有总数
+            total_operations = 0
         else:
             total_operations = self.total_windows * repeat_count
             current_operation = 0
         
-        # 主循环
         self.current_loop = 0
         while self.running:
-            # 检查是否需要无限循环或已到达重复次数
             if not is_infinite and self.current_loop >= repeat_count:
                 break
             
-            # 获取最新的参数
             key_type, method, delay, repeat_count, modifiers = self.get_parameters()
             is_infinite = (repeat_count == 0)
             
-            # 发送一轮所有窗口
             for idx, hwnd in enumerate(self.selected_windows):
                 if not self.running:
                     break
@@ -1096,7 +891,6 @@ class EnhancedKeyPressThread(QThread):
                 
                 if not is_infinite:
                     current_operation += 1
-                    # 计算百分比进度
                     progress_percent = int(current_operation / total_operations * 100)
                     self.progress_updated.emit(progress_percent)
                 
@@ -1110,7 +904,6 @@ class EnhancedKeyPressThread(QThread):
             
             self.current_loop += 1
             
-            # 无限模式下更新状态显示和进度条
             if is_infinite:
                 self.status_updated.emit(f"已完成 {self.current_loop} 轮发送，继续循环...")
                 self.log_message.emit(f"已完成第 {self.current_loop} 轮发送（无限模式）")
@@ -1124,6 +917,7 @@ class EnhancedKeyPressThread(QThread):
         
     def stop(self):
         self.running = False
+
 
 # 增强的窗口枚举线程
 class EnhancedWindowEnumThread(QThread):
@@ -1139,21 +933,13 @@ class EnhancedWindowEnumThread(QThread):
         self.show_debug = show_debug
         
     def debug_print(self, message):
-        """输出调试信息"""
         if self.show_debug:
             self.debug_log.emit(message)
-            console_print(f"[DEBUG] {message}")
         
     def run(self):
         windows = []
         total_visible = 0
         matched_count = 0
-        all_windows_info = []
-        
-        console_print("\n" + "="*80)
-        console_print("开始枚举窗口...")
-        console_print(f"枚举方式: {self.enum_method}, 标题关键词: '{self.title_keyword}', 程序名关键词: '{self.process_keyword}'")
-        console_print("="*80)
         
         def enum_callback(hwnd, extra):
             nonlocal total_visible, matched_count
@@ -1169,82 +955,28 @@ class EnhancedWindowEnumThread(QThread):
                 rect = win32gui.GetWindowRect(hwnd)
                 pid = win32process.GetWindowThreadProcessId(hwnd)[0]
                 
-                # 获取进程信息
                 process_info = get_all_process_names_from_hwnd(hwnd)
                 process_name = process_info['process_name']
                 process_path = process_info['process_path']
-                process_cmdline = process_info['process_cmdline']
-                modules = process_info['modules']
                 
-                # 输出到控制台
-                if total_visible <= 50:
-                    console_print(f"\n[{total_visible}] 窗口标题: '{window_text[:60]}'")
-                    console_print(f"    类名: '{class_name}'")
-                    console_print(f"    PID: {pid}")
-                    console_print(f"    进程名: '{process_name}'")
-                    console_print(f"    进程路径: '{process_path[:80]}'")
-                    if modules:
-                        console_print(f"    模块: {', '.join(modules[:5])}")
-                
-                # 调试输出到界面
                 if self.show_debug and total_visible <= 100:
                     debug_info = f"窗口: '{window_text[:40]}' | 类名: '{class_name}' | PID:{pid} | 进程: '{process_name}'"
-                    if process_path:
-                        debug_info += f" | 路径: '{os.path.basename(process_path)}'"
-                    if modules:
-                        debug_info += f" | 模块: {', '.join(modules[:3])}"
                     self.debug_print(debug_info)
-                    
-                    all_windows_info.append({
-                        'title': window_text[:50],
-                        'class': class_name,
-                        'pid': pid,
-                        'process_name': process_name,
-                        'process_path': os.path.basename(process_path) if process_path else '',
-                        'modules': modules[:5]
-                    })
                 
-                # 匹配逻辑
                 matched = False
-                match_info = ""
                 
                 if self.enum_method == EnumMethod.BY_TITLE:
                     if self.title_keyword and self.title_keyword in window_text.lower():
                         matched = True
-                        match_info = f"标题匹配: '{self.title_keyword}' in '{window_text[:50]}'"
-                        console_print(f"    ✓ 匹配成功: {match_info}")
                         
                 elif self.enum_method == EnumMethod.BY_PROCESS:
                     if self.process_keyword:
-                        console_print(f"    检查关键词 '{self.process_keyword}' 是否匹配...")
-                        
                         if self.process_keyword in process_name:
                             matched = True
-                            match_info = f"进程名匹配: '{self.process_keyword}' in '{process_name}'"
-                            console_print(f"    ✓ {match_info}")
-                            
                         elif process_path and self.process_keyword in os.path.basename(process_path).lower():
                             matched = True
-                            match_info = f"进程路径匹配: '{self.process_keyword}' in '{os.path.basename(process_path)}'"
-                            console_print(f"    ✓ {match_info}")
-                            
-                        elif self.process_keyword in process_cmdline:
-                            matched = True
-                            match_info = f"命令行匹配: '{self.process_keyword}' in '{process_cmdline[:100]}'"
-                            console_print(f"    ✓ {match_info}")
-                            
-                        elif any(self.process_keyword in module for module in modules):
-                            matched = True
-                            matched_module = next(module for module in modules if self.process_keyword in module)
-                            match_info = f"模块匹配: '{self.process_keyword}' 在模块 '{matched_module}' 中"
-                            console_print(f"    ✓ {match_info}")
-                            
                         elif self.process_keyword in class_name.lower():
                             matched = True
-                            match_info = f"窗口类名匹配: '{self.process_keyword}' in '{class_name}'"
-                            console_print(f"    ✓ {match_info}")
-                        else:
-                            console_print(f"    ✗ 无匹配")
                             
                 elif self.enum_method == EnumMethod.BY_BOTH:
                     title_match = self.title_keyword and self.title_keyword in window_text.lower()
@@ -1253,23 +985,14 @@ class EnhancedWindowEnumThread(QThread):
                     if self.process_keyword:
                         if (self.process_keyword in process_name or
                             (process_path and self.process_keyword in os.path.basename(process_path).lower()) or
-                            self.process_keyword in process_cmdline or
-                            any(self.process_keyword in module for module in modules) or
                             self.process_keyword in class_name.lower()):
                             process_match = True
                     
                     if title_match and process_match:
                         matched = True
-                        match_info = f"两者匹配"
-                        console_print(f"    ✓ 两者匹配成功")
                 
                 if matched:
                     matched_count += 1
-                    if self.show_debug:
-                        self.debug_print(f"✓ 匹配成功 [{matched_count}]: {match_info}")
-                    
-                    process_display = process_name if process_name else '未知'
-                    
                     windows.append({
                         'hwnd': hwnd,
                         'title': window_text,
@@ -1278,25 +1001,14 @@ class EnhancedWindowEnumThread(QThread):
                         'pid': pid,
                         'process_name': process_name,
                         'process_path': process_path,
-                        'process_cmdline': process_cmdline[:200] if process_cmdline else '',
-                        'modules': modules[:5]
                     })
             return True
             
         win32gui.EnumWindows(enum_callback, None)
         
-        console_print("\n" + "="*80)
-        console_print(f"枚举完成 - 总可见窗口: {total_visible}, 匹配成功: {matched_count}")
-        console_print("="*80)
-        
-        console_print("\n所有可见窗口汇总:")
-        for idx, win in enumerate(all_windows_info[:30], 1):
-            console_print(f"{idx:2}. PID:{win['pid']:6} | 进程: '{win['process_name']:20}' | 标题: '{win['title'][:40]}'")
-            if win['modules']:
-                console_print(f"      模块: {', '.join(win['modules'][:3])}")
-        
         self.progress_updated.emit(100)
         self.windows_found.emit(windows)
+
 
 # 增强的主窗口
 class EnhancedMainWindow(QMainWindow):
@@ -1309,15 +1021,11 @@ class EnhancedMainWindow(QMainWindow):
         self.init_ui()
         self.load_settings()
         
-        console_print("程序启动完成")
-        
-        # 连接参数变化信号，实时更新线程参数
         self.key_combo.currentTextChanged.connect(self.on_parameter_changed)
         self.delay_spin.valueChanged.connect(self.on_parameter_changed)
         self.method_combo.currentIndexChanged.connect(self.on_parameter_changed)
         self.repeat_spin.valueChanged.connect(self.on_parameter_changed)
         
-        # 连接组合键复选框变化信号
         self.cb_ctrl.stateChanged.connect(self.on_parameter_changed)
         self.cb_alt.stateChanged.connect(self.on_parameter_changed)
         self.cb_shift.stateChanged.connect(self.on_parameter_changed)
@@ -1325,7 +1033,7 @@ class EnhancedMainWindow(QMainWindow):
         
     def init_ui(self):
         self.setWindowTitle(f"{ProjectInfo.NAME} {ProjectInfo.VERSION} (Build: {ProjectInfo.BUILD_DATE})")
-        self.setMinimumSize(1300, 950)
+        self.setMinimumSize(1200, 800)
         
         if os.path.exists("icon.ico"):
             self.setWindowIcon(QIcon("icon.ico"))
@@ -1364,24 +1072,24 @@ class EnhancedMainWindow(QMainWindow):
         
         enum_layout.addWidget(QLabel("窗口标题关键词:"), 1, 0)
         self.title_keyword_edit = QLineEdit()
-        self.title_keyword_edit.setPlaceholderText("例如: 共创征途 或 游戏窗口标题")
+        self.title_keyword_edit.setPlaceholderText("例如: 游戏窗口标题")
         enum_layout.addWidget(self.title_keyword_edit, 1, 1, 1, 3)
         
         enum_layout.addWidget(QLabel("程序名关键词:"), 2, 0)
         self.process_keyword_edit = QLineEdit()
-        self.process_keyword_edit.setPlaceholderText("例如: zhengtu.dat 或 client.exe (支持部分匹配)")
+        self.process_keyword_edit.setPlaceholderText("例如: zhengtu.dat 或 client.exe")
         enum_layout.addWidget(self.process_keyword_edit, 2, 1, 1, 3)
         
         self.debug_checkbox = QCheckBox("调试模式 (显示所有窗口信息)")
         self.debug_checkbox.setChecked(True)
         enum_layout.addWidget(self.debug_checkbox, 3, 0, 1, 2)
         
-        tip_label = QLabel("💡 提示: 程序名支持匹配进程名、路径、模块名、窗口类名和命令行")
+        tip_label = QLabel("提示: 程序名支持匹配进程名、路径和窗口类名")
         tip_label.setStyleSheet("color: #666; font-size: 9pt;")
         enum_layout.addWidget(tip_label, 3, 2, 1, 2)
         
         button_layout = QHBoxLayout()
-        self.refresh_btn = QPushButton("🔍 刷新窗口列表")
+        self.refresh_btn = QPushButton("刷新窗口列表")
         self.refresh_btn.clicked.connect(self.enumerate_windows)
         self.refresh_btn.setStyleSheet("""
             QPushButton {
@@ -1425,7 +1133,7 @@ class EnhancedMainWindow(QMainWindow):
         settings_group = QGroupBox(f"按键设置（{BackendKeyMethod.get_total_count()}种方式 + 组合键支持）")
         settings_layout = QGridLayout()
         
-        # 组合键区域 - 在按键类型上方
+        # 组合键区域
         settings_layout.addWidget(QLabel("组合键:"), 0, 0)
         modifier_layout = QHBoxLayout()
         
@@ -1433,20 +1141,16 @@ class EnhancedMainWindow(QMainWindow):
         self.cb_alt = QCheckBox("Alt")
         self.cb_shift = QCheckBox("Shift")
         self.cb_win = QCheckBox("Win")
-        self.cb_fn = QCheckBox("Fn (功能键)")
-        self.cb_fn.setToolTip("注意：Fn键是硬件级按键，大多数情况下无法通过软件模拟")
         
         modifier_layout.addWidget(self.cb_ctrl)
         modifier_layout.addWidget(self.cb_alt)
         modifier_layout.addWidget(self.cb_shift)
         modifier_layout.addWidget(self.cb_win)
-        modifier_layout.addWidget(self.cb_fn)
         modifier_layout.addStretch()
         
         settings_layout.addLayout(modifier_layout, 0, 1, 1, 5)
         
-        # 添加分隔提示
-        tip_modifier = QLabel("💡 提示: 可以同时选择多个组合键，如 Ctrl+Alt+A")
+        tip_modifier = QLabel("提示: 可以同时选择多个组合键，如 Ctrl+Alt+A")
         tip_modifier.setStyleSheet("color: #666; font-size: 9pt;")
         settings_layout.addWidget(tip_modifier, 1, 1, 1, 5)
         
@@ -1455,7 +1159,7 @@ class EnhancedMainWindow(QMainWindow):
         self.key_combo = QComboBox()
         self.key_combo.addItems(KEY_LIST)
         self.key_combo.setEditable(True)
-        self.key_combo.setToolTip("支持选择预设按键，也可以手动输入虚拟键码（如0x41代表A，0x20代表空格）")
+        self.key_combo.setToolTip("支持选择预设按键，也可以手动输入虚拟键码（如0x41代表A）")
         settings_layout.addWidget(self.key_combo, 2, 1)
         
         settings_layout.addWidget(QLabel("发送间隔(秒):"), 2, 2)
@@ -1475,22 +1179,20 @@ class EnhancedMainWindow(QMainWindow):
         
         settings_layout.addWidget(QLabel("后台按键方式:"), 3, 0)
         self.method_combo = QComboBox()
-        # 生成所有方法列表
         methods = []
         for i in range(BackendKeyMethod.get_total_count()):
             method_name = BackendKeyMethod.get_method_name(i)
             methods.append(f"{i+1:2d}. {method_name}")
         self.method_combo.addItems(methods)
-        self.method_combo.setMaxVisibleItems(20)  # 显示最多20项，滚动查看
+        self.method_combo.setMaxVisibleItems(20)
         settings_layout.addWidget(self.method_combo, 3, 1, 1, 3)
         
-        # 添加方法数量提示
-        method_tip = QLabel(f"💡 共 {BackendKeyMethod.get_total_count()} 种后台按键方式，可通过滚动条查看所有方式")
+        method_tip = QLabel(f"共 {BackendKeyMethod.get_total_count()} 种后台按键方式，可通过滚动条查看所有方式")
         method_tip.setStyleSheet("color: #666; font-size: 9pt;")
         settings_layout.addWidget(method_tip, 3, 4, 1, 2)
         
         control_layout = QHBoxLayout()
-        self.start_btn = QPushButton("▶ 开始发送按键")
+        self.start_btn = QPushButton("开始发送按键")
         self.start_btn.setStyleSheet("""
             QPushButton {
                 background-color: #4CAF50;
@@ -1506,7 +1208,7 @@ class EnhancedMainWindow(QMainWindow):
         """)
         self.start_btn.clicked.connect(self.start_sending_keys)
         
-        self.stop_btn = QPushButton("⏹ 停止发送")
+        self.stop_btn = QPushButton("停止发送")
         self.stop_btn.setStyleSheet("""
             QPushButton {
                 background-color: #f44336;
@@ -1551,7 +1253,6 @@ class EnhancedMainWindow(QMainWindow):
         """)
         progress_layout.addWidget(self.progress_bar)
         
-        # 添加轮数显示标签（用于无限循环模式）
         self.loop_label = QLabel("发送轮数: 0")
         self.loop_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.loop_label.setStyleSheet("color: #666; font-size: 10pt;")
@@ -1591,12 +1292,11 @@ class EnhancedMainWindow(QMainWindow):
         self.log_message("就绪 - 请设置枚举条件后点击刷新窗口列表")
         self.log_message("提示: 重复次数设置为0时，将无限循环发送，直到手动停止")
         self.log_message("提示: 发送过程中可以随时修改参数，修改后立即生效")
-        self.log_message(f"提示: 按键类型支持{len(KEY_LIST)}种预设按键，也支持手动输入虚拟键码(如0x41)")
+        self.log_message(f"提示: 按键类型支持{len(KEY_LIST)}种预设按键，也支持手动输入虚拟键码")
         self.log_message("提示: 支持组合键发送，可同时选择Ctrl、Alt、Shift、Win等多个修饰键")
         self.log_message(f"提示: 当前支持 {BackendKeyMethod.get_total_count()} 种后台按键发送方式")
         
     def get_selected_modifiers(self):
-        """获取选中的组合键列表"""
         modifiers = []
         if self.cb_ctrl.isChecked():
             modifiers.append("Ctrl")
@@ -1606,12 +1306,9 @@ class EnhancedMainWindow(QMainWindow):
             modifiers.append("Shift")
         if self.cb_win.isChecked():
             modifiers.append("Win")
-        if self.cb_fn.isChecked():
-            self.log_message("⚠ 注意: Fn键是硬件级按键，大多数情况下无法通过软件模拟，已忽略")
         return modifiers
         
     def on_parameter_changed(self):
-        """参数变化时，如果正在发送，则实时更新线程参数"""
         if self.key_thread and self.key_thread.isRunning():
             key_type = self.key_combo.currentText()
             method_index = self.method_combo.currentIndex()
@@ -1626,7 +1323,6 @@ class EnhancedMainWindow(QMainWindow):
             self.log_message(f"参数已实时更新 - 组合键:{modifier_str}, 按键:{key_type}, 方式:{method_name}, 间隔:{delay}秒, 重复:{repeat_count}")
         
     def on_enum_method_changed(self):
-        """枚举方式改变时更新输入框状态"""
         if self.radio_title.isChecked():
             self.title_keyword_edit.setEnabled(True)
             self.process_keyword_edit.setEnabled(False)
@@ -1635,14 +1331,13 @@ class EnhancedMainWindow(QMainWindow):
             self.title_keyword_edit.setEnabled(False)
             self.title_keyword_edit.setPlaceholderText("按程序名模式，窗口标题关键词已禁用")
             self.process_keyword_edit.setEnabled(True)
-            self.process_keyword_edit.setPlaceholderText("例如: zhengtu.dat 或 client.exe (支持部分匹配)")
+            self.process_keyword_edit.setPlaceholderText("例如: zhengtu.dat 或 client.exe")
         else:
             self.title_keyword_edit.setEnabled(True)
             self.process_keyword_edit.setEnabled(True)
-            self.process_keyword_edit.setPlaceholderText("例如: zhengtu.dat 或 client.exe (支持部分匹配)")
+            self.process_keyword_edit.setPlaceholderText("例如: zhengtu.dat 或 client.exe")
             
     def get_enum_method(self):
-        """获取当前枚举方式"""
         if self.radio_title.isChecked():
             return EnumMethod.BY_TITLE
         elif self.radio_process.isChecked():
@@ -1651,18 +1346,9 @@ class EnhancedMainWindow(QMainWindow):
             return EnumMethod.BY_BOTH
         
     def enumerate_windows(self):
-        """枚举窗口"""
-        console_print("\n" + "="*80)
-        console_print("用户点击了刷新按钮")
-        console_print("="*80)
-        
         enum_method = self.get_enum_method()
         title_keyword = self.title_keyword_edit.text().strip()
         process_keyword = self.process_keyword_edit.text().strip()
-        
-        console_print(f"枚举方式: {enum_method}")
-        console_print(f"标题关键词: '{title_keyword}'")
-        console_print(f"程序名关键词: '{process_keyword}'")
         
         if enum_method == EnumMethod.BY_TITLE and not title_keyword:
             QMessageBox.warning(self, "警告", "请填写窗口标题关键词")
@@ -1685,7 +1371,7 @@ class EnhancedMainWindow(QMainWindow):
         self.log_message(f"  程序名关键词: '{process_keyword}'")
         
         if self.debug_checkbox.isChecked():
-            self.log_message("🔧 调试模式已开启，将显示所有窗口的详细信息")
+            self.log_message("调试模式已开启，将显示所有窗口的详细信息")
         
         self.enum_thread = EnhancedWindowEnumThread(
             enum_method, 
@@ -1699,9 +1385,6 @@ class EnhancedMainWindow(QMainWindow):
         self.enum_thread.start()
         
     def on_windows_found(self, windows):
-        """窗口枚举完成"""
-        console_print(f"\n找到 {len(windows)} 个匹配窗口")
-        
         self.window_list.clear()
         self.window_items.clear()
         
@@ -1709,69 +1392,50 @@ class EnhancedMainWindow(QMainWindow):
             rect = window['rect']
             size_info = f"{rect[2]-rect[0]}x{rect[3]-rect[1]}"
             process_name = window.get('process_name', '未知')
-            modules = window.get('modules', [])
-            
-            console_print(f"匹配窗口: '{window['title'][:50]}' | PID:{window['pid']} | 进程:{process_name} | 模块:{modules[:2]}")
-            
-            if modules:
-                module_info = f" 模块: {', '.join(modules[:2])}"
-            else:
-                module_info = ""
                 
             item = QListWidgetItem(
-                f"{window['title']} | [{window['class']}] | PID:{window['pid']} | 进程:{process_name}{module_info} | 尺寸:{size_info}"
+                f"{window['title']} | [{window['class']}] | PID:{window['pid']} | 进程:{process_name} | 尺寸:{size_info}"
             )
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             item.setCheckState(Qt.CheckState.Unchecked)
             item.setData(Qt.ItemDataRole.UserRole, window['hwnd'])
-            item.setData(Qt.ItemDataRole.UserRole + 1, window['pid'])
             self.window_list.addItem(item)
             self.window_items.append({
                 'hwnd': window['hwnd'],
                 'title': window['title'],
-                'class': window['class'],
-                'pid': window['pid'],
-                'rect': window['rect'],
-                'process_name': process_name,
-                'modules': modules,
                 'item': item
             })
         
         if windows:
             self.status_label.setText(f"找到 {len(windows)} 个窗口")
-            self.log_message(f"✓ 找到 {len(windows)} 个符合条件的窗口")
+            self.log_message(f"找到 {len(windows)} 个符合条件的窗口")
         else:
             self.status_label.setText("未找到符合条件的窗口")
-            self.log_message("✗ 未找到符合条件的窗口")
-            self.log_message("  建议:")
-            self.log_message("    1. 检查关键词是否正确")
-            self.log_message("    2. 开启调试模式查看所有窗口的进程名和模块信息")
-            self.log_message("    3. 尝试使用更短的关键词，如 'zhengtu' 而不是 'zhengtu.dat'")
-            self.log_message("    4. 确认目标程序正在运行且窗口可见")
-            self.log_message("    5. 建议以管理员权限运行程序")
+            self.log_message("未找到符合条件的窗口")
+            self.log_message("建议:")
+            self.log_message("  1. 检查关键词是否正确")
+            self.log_message("  2. 开启调试模式查看所有窗口信息")
+            self.log_message("  3. 尝试使用更短的关键词")
+            self.log_message("  4. 确认目标程序正在运行且窗口可见")
             
         self.refresh_btn.setEnabled(True)
         
     def on_enum_progress(self, progress):
-        """枚举进度更新"""
         self.progress_bar.setValue(progress)
         
     def select_all_windows(self):
-        """全选窗口"""
         for i in range(self.window_list.count()):
             item = self.window_list.item(i)
             item.setCheckState(Qt.CheckState.Checked)
         self.log_message("已全选所有窗口")
         
     def deselect_all_windows(self):
-        """取消全选"""
         for i in range(self.window_list.count()):
             item = self.window_list.item(i)
             item.setCheckState(Qt.CheckState.Unchecked)
         self.log_message("已取消全选")
         
     def get_selected_windows(self):
-        """获取选中的窗口句柄"""
         selected = []
         for i in range(self.window_list.count()):
             item = self.window_list.item(i)
@@ -1781,7 +1445,6 @@ class EnhancedMainWindow(QMainWindow):
         return selected
         
     def start_sending_keys(self):
-        """开始发送按键"""
         selected_windows = self.get_selected_windows()
         
         if not selected_windows:
@@ -1825,11 +1488,9 @@ class EnhancedMainWindow(QMainWindow):
         self.refresh_btn.setEnabled(False)
         
     def on_loop_count_updated(self, loop_count):
-        """更新循环轮数显示"""
         self.loop_label.setText(f"发送轮数: {loop_count}")
         
     def stop_sending_keys(self):
-        """停止发送按键"""
         if self.key_thread and self.key_thread.isRunning():
             self.key_thread.stop()
             self.key_thread.wait()
@@ -1837,31 +1498,25 @@ class EnhancedMainWindow(QMainWindow):
             self.status_label.setText("已停止")
             
     def on_key_progress(self, progress):
-        """按键进度更新"""
         if self.key_thread and self.key_thread.repeat_count == 0:
-            # 无限模式：重置进度条为脉冲模式，显示已完成的轮数
             if self.progress_bar.maximum() != 0:
                 self.progress_bar.setRange(0, 0)
                 if progress > 0:
                     self.progress_bar.setFormat(f"已发送 {progress} 轮")
         else:
-            # 有限模式：正常显示百分比进度
             if self.progress_bar.maximum() != 100:
                 self.progress_bar.setRange(0, 100)
             self.progress_bar.setValue(progress)
             self.progress_bar.setFormat("%p%")
         
     def on_key_status(self, status):
-        """按键状态更新"""
         self.status_label.setText(status)
         
     def on_key_finished(self):
-        """按键完成"""
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
         self.refresh_btn.setEnabled(True)
         
-        # 恢复进度条为正常模式
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         self.progress_bar.setFormat("%p%")
@@ -1875,7 +1530,6 @@ class EnhancedMainWindow(QMainWindow):
             self.status_label.setText("发送完成")
             
     def log_message(self, message):
-        """添加日志消息"""
         timestamp = time.strftime("%H:%M:%S")
         self.log_text.append(f"[{timestamp}] {message}")
         self.log_text.verticalScrollBar().setValue(
@@ -1883,7 +1537,6 @@ class EnhancedMainWindow(QMainWindow):
         )
         
     def save_settings(self):
-        """保存设置"""
         self.settings.setValue("key_type", self.key_combo.currentText())
         self.settings.setValue("delay", self.delay_spin.value())
         self.settings.setValue("method_index", self.method_combo.currentIndex())
@@ -1893,12 +1546,10 @@ class EnhancedMainWindow(QMainWindow):
         self.settings.setValue("process_keyword", self.process_keyword_edit.text())
         self.settings.setValue("debug_mode", self.debug_checkbox.isChecked())
         
-        # 保存组合键状态
         self.settings.setValue("modifier_ctrl", self.cb_ctrl.isChecked())
         self.settings.setValue("modifier_alt", self.cb_alt.isChecked())
         self.settings.setValue("modifier_shift", self.cb_shift.isChecked())
         self.settings.setValue("modifier_win", self.cb_win.isChecked())
-        self.settings.setValue("modifier_fn", self.cb_fn.isChecked())
         
         window_states = []
         for item_data in self.window_items:
@@ -1909,7 +1560,6 @@ class EnhancedMainWindow(QMainWindow):
         self.settings.setValue("window_states", json.dumps(window_states))
         
     def load_settings(self):
-        """加载设置"""
         if self.settings.contains("key_type"):
             self.key_combo.setCurrentText(self.settings.value("key_type"))
         if self.settings.contains("delay"):
@@ -1925,7 +1575,6 @@ class EnhancedMainWindow(QMainWindow):
         if self.settings.contains("debug_mode"):
             self.debug_checkbox.setChecked(self.settings.value("debug_mode") == "true" or self.settings.value("debug_mode") == True)
         
-        # 加载组合键状态
         if self.settings.contains("modifier_ctrl"):
             self.cb_ctrl.setChecked(self.settings.value("modifier_ctrl") == "true" or self.settings.value("modifier_ctrl") == True)
         if self.settings.contains("modifier_alt"):
@@ -1934,8 +1583,6 @@ class EnhancedMainWindow(QMainWindow):
             self.cb_shift.setChecked(self.settings.value("modifier_shift") == "true" or self.settings.value("modifier_shift") == True)
         if self.settings.contains("modifier_win"):
             self.cb_win.setChecked(self.settings.value("modifier_win") == "true" or self.settings.value("modifier_win") == True)
-        if self.settings.contains("modifier_fn"):
-            self.cb_fn.setChecked(self.settings.value("modifier_fn") == "true" or self.settings.value("modifier_fn") == True)
         
         if self.settings.contains("enum_method"):
             enum_method = int(self.settings.value("enum_method"))
@@ -1950,7 +1597,6 @@ class EnhancedMainWindow(QMainWindow):
         self.window_states_json = self.settings.value("window_states") if self.settings.contains("window_states") else None
         
     def apply_window_states(self):
-        """应用窗口状态"""
         if not self.window_states_json:
             return
             
@@ -1968,7 +1614,6 @@ class EnhancedMainWindow(QMainWindow):
             self.log_message(f"加载窗口状态失败: {e}")
             
     def closeEvent(self, event):
-        """关闭事件"""
         self.save_settings()
         if self.key_thread and self.key_thread.isRunning():
             self.key_thread.stop()
@@ -1976,19 +1621,6 @@ class EnhancedMainWindow(QMainWindow):
         event.accept()
 
 def main():
-    console_print("="*80)
-    console_print("程序启动")
-    console_print("="*80)
-    
-    # 检查管理员权限
-    try:
-        is_admin = ctypes.windll.shell32.IsUserAnAdmin()
-        console_print(f"管理员权限: {is_admin}")
-        if not is_admin:
-            console_print("⚠ 提示: 建议以管理员权限运行程序，以便更好地获取进程信息")
-    except:
-        pass
-    
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     
@@ -1997,8 +1629,6 @@ def main():
     
     window = EnhancedMainWindow()
     window.show()
-    
-    console_print("窗口已显示，等待用户操作...")
     
     sys.exit(app.exec())
 
